@@ -1,457 +1,452 @@
 "use client";
 
 /**
- * Workspace: 4 ペインの親コンポーネント。
+ * Workspace: 3タブ（今日・週間・収支）の親コンポーネント（副業ダッシュボード）。
  *
- * - Pane 1〜4 の state（candidates / selectedCandidateId / selectedDetail）を
- *   保持し、各ペインに props として渡す。
- *   `previousDetail` state は ADR-0011 §6 大決定 D で削除した（戻り先が候詳に固定
- *   されたため、直前の詳細を 1 段階覚える概念が不要になった）。
- * - Pane 3 = 候補者ダッシュボード（人物軸の編集: ヘッダー帯 + 採用条件 + 選考フロー）
- * - Pane 4 = ステージ軸の編集（選考ステージ詳細のみ）
- *   ADR-0015 §9 大決定 G により、Pane 4 のデフォルト state は `null`
- *   （ステージ未選択 = 畳み状態）。◀ ボタンは撤廃。
+ * - タブ状態・カテゴリ選択・タスク・トランザクション・選択ログ等の state を保持し
+ *   各ペインに props として渡す。
+ * - タブ切り替えは GlobalHeader の ToggleGroup で行う。
  *
- * レイアウト構造（shadcn/ui Sidebar を採用、ADR-0006 §3/§5 を本実装で改訂）:
+ * レイアウト構造:
  *
  * ```
- * <SidebarProvider> (h-screen, defaultOpen, Cmd+B でトグル)
- * ┌─ Sidebar (Pane 1) ─┬─ SidebarInset ─────────────────────┐
- * │ (画面最上端          │ ┌─ GlobalHeader (h-12) ─────────┐ │
- * │  〜最下端)           │ └─────────────────────────────────┘ │
- * │ collapsible="icon"  │ ┌─ Pane 2 ─┬─ Pane 3 ─┬─ Pane 4 ─┐ │
- * │ 240px ↔ 48px        │ │          │          │          │ │
- * └────────────────────┴─┴──────────┴──────────┴──────────┘
+ * <SidebarProvider> (h-screen)
+ * ┌─ Sidebar (Pane 1) ─┬─ SidebarInset ─────────────────────────────────┐
+ * │ カテゴリ（今日タブ） │ GlobalHeader h-12                             │
+ * │ collapsible="icon"  │ ┌─ 今日タブ ────────────────────────────────┐ │
+ * │ 240px ↔ 48px        │ │ TaskListPane 280px + TaskLogPane 380px     │ │
+ * │                     │ ├─ 週間タブ ─────────────────────────────────┤ │
+ * │                     │ │ WeeklyPane 全幅                            │ │
+ * │                     │ ├─ 収支タブ ─────────────────────────────────┤ │
+ * │                     │ │ FinancePane 全幅                           │ │
+ * │                     │ └────────────────────────────────────────────┘ │
+ * └─────────────────────┴───────────────────────────────────────────────┘
  * ```
- *
- * - Pane 1 のみ画面最上端〜最下端まで届く chrome（折りたたみ可）
- * - GlobalHeader は Pane 1 を除く右側全幅（Pane 2 / Pane 3 / Pane 4 の上）に渡る
- * - Pane 4 はヘッダー直下から最下端まで
- * - Pane 1 折りたたみトグルは Pane 1 ヘッダー右端の `Pane1Toggle` 1 箇所
- *   （ADR-0006 §5 で計画していた GlobalHeader 側の SidebarTrigger は本実装で撤回）
- *
- * 仕様の出典:
- *   - openspec/decision/0006-pane-background-hierarchy-and-shadcn-inset-header.md
- *     §2（4 段階背景色階層）/ §4（保存ステータス削除）はそのまま採用
- *     §3（Pane 4 = 画面最上端〜最下端 / ヘッダーは中央エリアのみ）は本実装で再改訂
- *     §5（SidebarTrigger は GlobalHeader）も本実装で再改訂（Pane 1 ヘッダー側に集約）
- *   - openspec/decision/0009-drilldown-card-affordance.md（Pane 3 ドリルダウンカードの ▶ 規律）
- *   - openspec/changes/add-4pane-workspace-template/specs/workspace-template/spec.md
- *   - openspec/changes/add-4pane-workspace-template/design.md D51〜D56 / D65
  */
 
 import { useState, useCallback, useMemo } from "react";
 
 import {
-  type Profile,
-  type AxisKey,
-  type StageKey,
-  type Department,
-  type Candidate,
-  type Group,
-  type SelectedDetail,
-  STAGE_ORDER,
+  type CategoryGroup,
+  type Task,
+  type TaskMeta,
+  type TaskLog,
+  type SlotKey,
+  type SelectedLog,
+  type Transaction,
 } from "@/lib/schema";
+import { type DailyReflection } from "@/lib/data/supabase-loader";
+import { createMinimalTask, createMinimalTaskLog } from "@/lib/data/factories";
 import {
-  createMinimalProfile,
-  createMinimalScorecard,
-} from "@/lib/data/factories";
-import { getCandidateAverageScore } from "@/lib/computed/scorecards";
-import { ARCHIVED_GROUP_LABEL, STAGE_LABELS } from "@/lib/labels";
+  dbAddTask,
+  dbArchiveTask,
+  dbRestoreTask,
+  dbMoveTask,
+  dbUpdateTaskMeta,
+  dbUpdateTaskCategoryId,
+  dbUpdateTaskSlot,
+  dbUpdateTaskDaysOfWeek,
+  dbCompleteTask,
+  dbAddTaskLog,
+  dbUpdateTaskLog,
+  dbAddTransaction,
+  dbDeleteTransaction,
+} from "@/lib/data/supabase-writer";
+import { buildTodayTaskGroups } from "@/lib/computed/tasks";
+import { getCurrentMonthLocal, shiftMonth } from "@/lib/computed/finance";
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import { GlobalHeader } from "@/components/workspace/GlobalHeader";
-import { PositionPane } from "@/components/workspace/PositionPane";
-import { CandidateListPane } from "@/components/workspace/CandidateListPane";
-import { CandidateDashboardPane } from "@/components/workspace/CandidateDashboardPane";
-import { CandidateDetailPane } from "@/components/workspace/CandidateDetailPane";
+import { CategoryPane } from "@/components/workspace/CategoryPane";
+import { TaskListPane } from "@/components/workspace/TaskListPane";
+import { WeeklyPane } from "@/components/workspace/WeeklyPane";
+import { TaskLogPane } from "@/components/workspace/TaskLogPane";
+import { FinancePane } from "@/components/workspace/FinancePane";
 
-// ========== UI 内部型 ==========
-//
-// 種データは `data/*.json` → Server Component（app/page.tsx）で Zod parse → props で受け取る。
-// ヘルパー関数（createMinimalProfile / createMinimalScorecard）は `lib/data/factories.ts`。
-// Pane 2 の表示用派生型 (CandidateRow / Group) と `SelectedDetail` 型は
-// `lib/schema.ts` に集約（複数ペインで共有するため）。
-// Pane 4 モード 2 用の `EditableScorecardKey` は
-// `components/workspace/CandidateDetailPane.tsx` 内部の閉じた型。
-
-// `updateScorecardField` の field 引数で使う key の union 型。Pane 4 内部の
-// `EditableScorecardKey` と同形。CandidateDetailPane 内部に閉じた型として扱い
-// たいため export せず、親側で同じ形を再宣言して持つ。
-//
-// ADR-0014「shadcn 標準フォームによる Pane 4 編集 UI」で `comment` / `summary`
-// を `InlineTextareaField` で編集対象に追加したため、旧 4 フィールドから 6 フィールド
-// に拡張。CandidateDetailPane.tsx 側の同型宣言（line 70-76）と同期させる。
-// `onUpdateScorecardField` 実装本体は `[field]: value` のスプレッドで
-// 動作するため、ロジックの追加修正は不要。
-type EditableScorecardKey =
-  | "date"
-  | "format"
-  | "interviewer"
-  | "decision"
-  | "comment"
-  | "summary";
+export type ActiveTab = "today" | "weekly" | "finance";
 
 type WorkspaceProps = {
-  initialDepartments: Department[];
-  initialCandidates: Candidate[];
+  initialCategoryGroups: CategoryGroup[];
+  initialTasks: Task[];
+  initialTransactions: Transaction[];
+  initialReflection: DailyReflection;
   workspace: { name: string; icon: string };
 };
 
 export function Workspace({
-  initialDepartments,
-  initialCandidates,
+  initialCategoryGroups,
+  initialTasks,
+  initialTransactions,
+  initialReflection,
   workspace,
 }: WorkspaceProps) {
-  const [departments, setDepartments] =
-    useState<Department[]>(initialDepartments);
-  const [candidates, setCandidates] = useState<Candidate[]>(initialCandidates);
-  const [selectedCandidateId, setSelectedCandidateId] = useState<string>("c2");
-  const [selectedDetail, setSelectedDetail] = useState<SelectedDetail>(null);
+  const [categoryGroups, setCategoryGroups] =
+    useState<CategoryGroup[]>(initialCategoryGroups);
+  const [tasks, setTasks] = useState<Task[]>(initialTasks);
+  const [transactions, setTransactions] =
+    useState<Transaction[]>(initialTransactions);
+  const [reflection, setReflection] =
+    useState<DailyReflection>(initialReflection);
+
+  const [activeTab, setActiveTab] = useState<ActiveTab>("today");
+  const [selectedMonth, setSelectedMonth] = useState<string>(getCurrentMonthLocal);
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+  const [selectedTaskId, setSelectedTaskId] = useState<string>(
+    initialTasks[0]?.id ?? "",
+  );
+  const [selectedLog, setSelectedLog] = useState<SelectedLog>(null);
   const [scrollAnchor, setScrollAnchor] = useState<string | null>(null);
-  // ユーザーが手動で Pane 4 を畳んだか。ステージ選択は保持しつつ畳む用途。
-  const [pane4ManuallyClosed, setPane4ManuallyClosed] = useState(false);
-  // Pane 3 ヘッダー帯（Collapsible）の開閉。候補者切替で閉じ、新規追加で開く。
-  const [applicationInfoOpen, setApplicationInfoOpen] = useState(false);
 
-  // Pane 4 の展開状態を派生計算（ADR-0015 §9 大決定 G）。
-  // selectedDetail !== null かつ手動で畳んでいない → 開いている。
-  const pane4Open = selectedDetail !== null && !pane4ManuallyClosed;
+  // アクティブタスク
+  const activeTask =
+    tasks.find((t) => t.id === selectedTaskId) ?? tasks[0] ?? null;
 
-  // アクティブ候補者を取得。`INITIAL_CANDIDATES` が常に最低 1 名持つ前提だが、
-  // 万一 find が undefined を返す（未来に candidates の削除機能が入った場合等）
-  // ケースに備えて先頭候補者にフォールバックする。
-  const activeCandidate =
-    candidates.find((c) => c.id === selectedCandidateId) ?? candidates[0];
-  const profile = activeCandidate.profile;
-  const scorecards = activeCandidate.scorecards;
+  // ===== 今日タブ: TaskGroup 派生計算 =====
 
-  // Mode1ProfileDetail は `setProfile: React.Dispatch<React.SetStateAction<Profile>>`
-  // を期待している（採用案 X）。子コンポーネント側の signature を変えないために、
-  // candidates 配列を更新するアダプタをここで作る。
-  // 関数形 (p => next) と値形 (next) の両方に対応する。
-  const setProfile = useCallback<React.Dispatch<React.SetStateAction<Profile>>>(
-    (action) => {
-      setCandidates((prev) =>
-        prev.map((c) => {
-          if (c.id !== selectedCandidateId) return c;
-          const next =
-            typeof action === "function" ? action(c.profile) : action;
-          return { ...c, profile: next };
-        }),
-      );
-    },
-    [selectedCandidateId],
+  const todayDow = useMemo(() => new Date().getDay(), []);
+
+  const taskGroups = useMemo(
+    () => buildTodayTaskGroups(tasks, todayDow, selectedCategoryId),
+    [tasks, todayDow, selectedCategoryId],
   );
 
-  const openDetail = useCallback(
-    (next: SelectedDetail, anchor?: string) => {
-      if (next?.type === "stage") {
-        setCandidates((prev) =>
-          prev.map((c) => {
-            if (c.id !== selectedCandidateId) return c;
-            if (c.scorecards.some((s) => s.stage === next.stage)) return c;
-            return {
-              ...c,
-              scorecards: [...c.scorecards, createMinimalScorecard(next.stage)],
-            };
-          }),
-        );
+  // ===== カテゴリ情報（GlobalHeader 用）=====
+
+  let selectedCategory: { group: (typeof categoryGroups)[number]; category: (typeof categoryGroups)[number]["categories"][number] } | null = null;
+  if (selectedCategoryId) {
+    outer: for (const g of categoryGroups) {
+      for (const cat of g.categories) {
+        if (cat.id === selectedCategoryId) {
+          selectedCategory = { group: g, category: cat };
+          break outer;
+        }
       }
-      setSelectedDetail(next);
-      setScrollAnchor(anchor ?? null);
-      setPane4ManuallyClosed(false);
-    },
-    [selectedCandidateId],
-  );
+    }
+  }
 
-  // Pane 2 の候補者行クリックでアクティブ候補者を切り替える。
-  // - selectedDetail が「ステージ詳細」だった場合、新候補者にそのステージの
-  //   scorecard が無ければ Pane 4 を **候補者詳細にフォールバック**する
-  //   （ADR-0011 §7 大決定 E、旧 null フォールバックを撤回）。c2 以外は
-  //   scorecards: [] のため、c2 → 別候補者の切替時はほぼ常に候詳へフォールバック。
-  // - selectedDetail が「候補者詳細」のときは維持してよい（profile はどの候補者にも
-  //   必ず存在する）。
-  // - previousDetail state は ADR-0011 §6 大決定 D で削除済みのため、リセット不要。
-  const selectCandidate = useCallback((id: string) => {
-    setSelectedCandidateId(id);
-    setSelectedDetail(null);
-    setApplicationInfoOpen(false);
-    setPane4ManuallyClosed(false);
+  // ===== Pane 1: カテゴリ管理 =====
+
+  const addCategoryGroup = useCallback((name: string) => {
+    setCategoryGroups((prev) => [
+      ...prev,
+      { id: `g-${Date.now()}`, name, categories: [] },
+    ]);
   }, []);
 
-  const addCandidate = useCallback((stage: StageKey, name: string) => {
-    const newId = `c-${Date.now()}`;
-    const newCandidate: Candidate = {
-      id: newId,
-      profile: createMinimalProfile(name),
-      scorecards: [],
-      stage,
-      archived: false,
-    };
-    setCandidates((prev) => [...prev, newCandidate]);
-    setSelectedCandidateId(newId);
-    setSelectedDetail(null);
-    setApplicationInfoOpen(true);
-    setPane4ManuallyClosed(false);
+  const deleteCategoryGroup = useCallback((groupId: string) => {
+    setCategoryGroups((prev) => prev.filter((g) => g.id !== groupId));
   }, []);
 
-  // 候補者をアーカイブ（論理削除）する。データは残し `archived: true` を立てる。
-  // 復元は `restoreCandidate` から、もしくは Pane 2「アーカイブ済み」グループの
-  // 「復元」ボタン経由。アクティブ候補者をアーカイブした場合は、非 archived の
-  // 先頭候補者にフォールバックし、ステージ詳細（Pane 4）はクリアする。
-  const archiveCandidate = useCallback((id: string) => {
-    setCandidates((prev) => {
-      const next = prev.map((c) =>
-        c.id === id ? { ...c, archived: true } : c,
-      );
-      setSelectedCandidateId((prevId) => {
-        if (prevId !== id) return prevId;
-        const fallback = next.find((c) => !c.archived);
-        return fallback ? fallback.id : "";
-      });
-      return next;
-    });
-    setSelectedDetail(null);
-    setPane4ManuallyClosed(false);
-  }, []);
-
-  // アーカイブ済み候補者を元のステージに復元する。`stage` は archived 中も保持
-  // しているので、そのステージへ戻すだけでよい。
-  const restoreCandidate = useCallback((id: string) => {
-    setCandidates((prev) =>
-      prev.map((c) => (c.id === id ? { ...c, archived: false } : c)),
+  const addCategory = useCallback((groupId: string, categoryName: string) => {
+    setCategoryGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId
+          ? {
+              ...g,
+              categories: [
+                ...g.categories,
+                { id: `cat-${Date.now()}`, name: categoryName },
+              ],
+            }
+          : g,
+      ),
     );
   }, []);
 
-  // 候補者を別ステージへ移動 / 同ステージ内で並び替え。
-  //
-  // `toStage` は移動先のステージキー。`toIndex` はそのステージグループ内での
-  // 0-origin の挿入位置。配列順を SSoT としているため、candidates 配列上の
-  // 絶対インデックスに変換して `splice` 相当の挿入を行う。
-  //
-  // 同ステージ内ドラッグ・別ステージへのドラッグの両方をこの 1 関数で扱う。
-  // archived 候補者は対象外（DnD はアクティブな候補者のみ可能）。
-  const moveCandidate = useCallback(
-    (id: string, toStage: StageKey, toIndex: number) => {
-      setCandidates((prev) => {
-        const subjectIndex = prev.findIndex((c) => c.id === id);
-        if (subjectIndex < 0) return prev;
-        const subject = prev[subjectIndex];
-        if (subject.archived) return prev;
+  const deleteCategory = useCallback((groupId: string, categoryId: string) => {
+    setCategoryGroups((prev) =>
+      prev.map((g) =>
+        g.id === groupId
+          ? { ...g, categories: g.categories.filter((c) => c.id !== categoryId) }
+          : g,
+      ),
+    );
+    // 選択中カテゴリが削除された場合は「すべて」に戻す
+    setSelectedCategoryId((prev) => (prev === categoryId ? null : prev));
+    // transactions の孤児参照を除去
+    setTransactions((prev) => prev.filter((tx) => tx.categoryId !== categoryId));
+  }, []);
 
-        const without = prev.filter((_, i) => i !== subjectIndex);
-        const updated: Candidate = { ...subject, stage: toStage };
+  // ===== 収支トランザクション =====
 
-        let count = 0;
-        let absInsertAt = without.length;
-        for (let i = 0; i < without.length; i++) {
-          const c = without[i];
-          if (!c.archived && c.stage === toStage) {
-            if (count === toIndex) {
-              absInsertAt = i;
-              break;
-            }
-            count++;
-          }
-        }
-        return [
-          ...without.slice(0, absInsertAt),
-          updated,
-          ...without.slice(absInsertAt),
-        ];
+  const addTransaction = useCallback((tx: Omit<Transaction, "id">) => {
+    const newTx: Transaction = { ...tx, id: `tx-${Date.now()}` };
+    setTransactions((prev) => [...prev, newTx]);
+    dbAddTransaction(newTx);
+  }, []);
+
+  const deleteTransaction = useCallback((id: string) => {
+    setTransactions((prev) => prev.filter((tx) => tx.id !== id));
+    dbDeleteTransaction(id);
+  }, []);
+
+  // ===== 月ナビ（収支タブ）=====
+
+  const currentMonth = useMemo(() => getCurrentMonthLocal(), []);
+
+  const handlePrevMonth = useCallback(() => {
+    setSelectedMonth((m) => shiftMonth(m, -1));
+  }, []);
+
+  const handleNextMonth = useCallback(() => {
+    setSelectedMonth((m) => {
+      const next = shiftMonth(m, 1);
+      return next > currentMonth ? m : next;
+    });
+  }, [currentMonth]);
+
+  // ===== タスク操作 =====
+
+  const selectTask = useCallback((id: string) => {
+    setSelectedTaskId(id);
+    setSelectedLog(null);
+  }, []);
+
+  const addTask = useCallback(
+    (title: string, slot: SlotKey) => {
+      const categoryId =
+        selectedCategoryId ?? categoryGroups[0]?.categories[0]?.id ?? "";
+      const newTask = createMinimalTask(title, categoryId, slot);
+      setTasks((prev) => {
+        const position = prev.filter((t) => t.slot === slot && !t.archived).length;
+        dbAddTask({ id: newTask.id, categoryId, slot, position, title });
+        return [...prev, newTask];
       });
+      setSelectedTaskId(newTask.id);
+      setSelectedLog(null);
+    },
+    [selectedCategoryId, categoryGroups],
+  );
+
+  const archiveTask = useCallback((id: string) => {
+    setTasks((prev) => {
+      const next = prev.map((t) => (t.id === id ? { ...t, archived: true } : t));
+      // フォールバック先を最新 prev から探す（stale closure を避ける）
+      setSelectedTaskId((prevId) => {
+        if (prevId !== id) return prevId;
+        const fallback = next.find((t) => t.id !== id && !t.archived);
+        return fallback?.id ?? "";
+      });
+      return next;
+    });
+    setSelectedLog(null);
+    dbArchiveTask(id);
+  }, []);
+
+  const restoreTask = useCallback((id: string) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, archived: false } : t)),
+    );
+    dbRestoreTask(id);
+  }, []);
+
+  const moveTask = useCallback((id: string, toSlot: SlotKey, toIndex: number) => {
+    setTasks((prev) => {
+      const subjectIndex = prev.findIndex((t) => t.id === id);
+      if (subjectIndex < 0) return prev;
+      const subject = prev[subjectIndex];
+      if (subject.archived) return prev;
+
+      const without = prev.filter((_, i) => i !== subjectIndex);
+      const updated: Task = { ...subject, slot: toSlot };
+
+      let count = 0;
+      let absInsertAt = without.length;
+      for (let i = 0; i < without.length; i++) {
+        const t = without[i];
+        if (!t.archived && t.slot === toSlot) {
+          if (count === toIndex) {
+            absInsertAt = i;
+            break;
+          }
+          count++;
+        }
+      }
+      dbMoveTask(id, toSlot, toIndex);
+      return [
+        ...without.slice(0, absInsertAt),
+        updated,
+        ...without.slice(absInsertAt),
+      ];
+    });
+  }, []);
+
+  const updateTaskDaysOfWeek = useCallback((taskId: string, daysOfWeek: number[]) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, daysOfWeek } : t)),
+    );
+    dbUpdateTaskDaysOfWeek(taskId, daysOfWeek);
+  }, []);
+
+  // ===== タスクメタ編集 =====
+
+  const updateTaskMeta = useCallback(
+    <K extends keyof TaskMeta>(taskId: string, key: K, value: TaskMeta[K]) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId ? { ...t, meta: { ...t.meta, [key]: value } } : t,
+        ),
+      );
+      dbUpdateTaskMeta(taskId, key, value);
     },
     [],
   );
 
-  const addDepartment = useCallback((name: string) => {
-    setDepartments((prev) => [
-      ...prev,
-      { id: `d-${Date.now()}`, name, positions: [] },
-    ]);
+  const updateTaskCategoryId = useCallback((taskId: string, categoryId: string) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, categoryId } : t)),
+    );
+    dbUpdateTaskCategoryId(taskId, categoryId);
   }, []);
 
-  const deleteDepartment = useCallback((deptId: string) => {
-    setDepartments((prev) => prev.filter((d) => d.id !== deptId));
+  const updateTaskSlot = useCallback((taskId: string, slot: SlotKey) => {
+    setTasks((prev) =>
+      prev.map((t) => (t.id === taskId ? { ...t, slot } : t)),
+    );
+    dbUpdateTaskSlot(taskId, slot);
   }, []);
 
-  const addPosition = useCallback((deptId: string, posName: string) => {
-    setDepartments((prev) =>
-      prev.map((d) =>
-        d.id === deptId
-          ? {
-              ...d,
-              positions: [
-                ...d.positions,
-                { id: `p-${Date.now()}`, name: posName, count: 0 },
-              ],
-            }
-          : d,
+  // ===== ログ操作 =====
+
+  const openLog = useCallback((next: SelectedLog, anchor?: string) => {
+    setSelectedLog(next);
+    setScrollAnchor(anchor ?? null);
+  }, []);
+
+  const addTaskLog = useCallback((taskId: string) => {
+    const newLog = createMinimalTaskLog();
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, logs: [...t.logs, newLog] } : t,
       ),
     );
+    setSelectedLog({ type: "log", logId: newLog.id });
+    dbAddTaskLog(taskId, newLog);
   }, []);
 
-  const deletePosition = useCallback((deptId: string, posId: string) => {
-    setDepartments((prev) =>
-      prev.map((d) =>
-        d.id === deptId
-          ? { ...d, positions: d.positions.filter((p) => p.id !== posId) }
-          : d,
-      ),
-    );
-  }, []);
-
-  // 評価観点 ★ の編集ハンドラ。フェーズ 3A から「アクティブ候補者」の
-  // scorecards を更新する形に変更（candidates 配列の中の該当候補者だけを差し替え）。
-  const updateAxisScore = useCallback(
-    (stage: StageKey, axis: AxisKey, value: number | null) => {
-      setCandidates((prev) =>
-        prev.map((c) =>
-          c.id === selectedCandidateId
+  const updateTaskLog = useCallback(
+    <K extends keyof TaskLog>(
+      taskId: string,
+      logId: string,
+      key: K,
+      value: TaskLog[K],
+    ) => {
+      setTasks((prev) =>
+        prev.map((t) =>
+          t.id === taskId
             ? {
-                ...c,
-                scorecards: c.scorecards.map((s) =>
-                  s.stage === stage
-                    ? { ...s, axisScores: { ...s.axisScores, [axis]: value } }
-                    : s,
+                ...t,
+                logs: t.logs.map((l) =>
+                  l.id === logId ? { ...l, [key]: value } : l,
                 ),
               }
-            : c,
+            : t,
         ),
       );
+      dbUpdateTaskLog(logId, key, value);
     },
-    [selectedCandidateId],
+    [],
   );
 
-  // Pane 4 モード 2「メタ情報」の inline edit から呼ばれる。
-  // `decision` だけ undefined を許すため、空文字は undefined として扱う
-  // （`MetaRow` 廃止前の "未判定" 表示の代替: `EditableFieldRow` 側で空 = "未設定"）。
-  // フェーズ 3A: アクティブ候補者の scorecards を更新する形に変更。
-  const updateScorecardField = useCallback(
-    (stage: StageKey, field: EditableScorecardKey, value: string) => {
-      setCandidates((prev) =>
-        prev.map((c) =>
-          c.id === selectedCandidateId
-            ? {
-                ...c,
-                scorecards: c.scorecards.map((s) => {
-                  if (s.stage !== stage) return s;
-                  if (field === "decision") {
-                    const trimmed = value.trim();
-                    return {
-                      ...s,
-                      decision: trimmed === "" ? undefined : trimmed,
-                    };
-                  }
-                  return { ...s, [field]: value };
-                }),
-              }
-            : c,
-        ),
-      );
-    },
-    [selectedCandidateId],
-  );
+  const completeTask = useCallback((taskId: string) => {
+    setTasks((prev) =>
+      prev.map((t) =>
+        t.id === taskId ? { ...t, slot: "done" as SlotKey } : t,
+      ),
+    );
+    setSelectedLog(null);
+    dbCompleteTask(taskId);
+  }, []);
 
-  // Pane 4 内の `useEffect` 依存安定化のため、Workspace 側でメモ化して props で渡す。
   const consumeScrollAnchor = useCallback(() => setScrollAnchor(null), []);
-  const togglePane4 = useCallback(() => setPane4ManuallyClosed((v) => !v), []);
 
-  const positionTitle = "フロントエンドエンジニア";
-  const departmentTitle = "プロダクト開発";
+  const updateReflection = useCallback(
+    (field: "item1" | "item2" | "item3", value: string) => {
+      setReflection((prev) => ({ ...prev, [field]: value }));
+    },
+    [],
+  );
 
-  const candidateGroups: Group[] = useMemo(() => {
-    // ステージグループは常に 4 段階すべて表示する。空ステージも残すことで、
-    // 「最後の 1 名を別ステージへ動かしたら戻し先が消える」事故を防ぐ
-    // （ADR-006 §2-2 の補足）。
-    const stageGroups: Group[] = STAGE_ORDER.map((stage) => ({
-      kind: "stage" as const,
-      stage,
-      label: STAGE_LABELS[stage],
-      items: candidates
-        .filter((c) => !c.archived && c.stage === stage)
-        .map((c) => ({
-          id: c.id,
-          name: c.profile.name,
-          averageScore: getCandidateAverageScore(c),
-        })),
-    }));
-
-    const archivedItems = candidates
-      .filter((c) => c.archived)
-      .map((c) => ({
-        id: c.id,
-        name: c.profile.name,
-        averageScore: getCandidateAverageScore(c),
-      }));
-
-    if (archivedItems.length === 0) return stageGroups;
-    return [
-      ...stageGroups,
-      { kind: "archived" as const, label: ARCHIVED_GROUP_LABEL, items: archivedItems },
-    ];
-  }, [candidates]);
+  // ===== render =====
 
   return (
-    // shadcn/ui の SidebarProvider が外側を取り、Pane 1 (`<Sidebar>`) を全高で固定
-    // 表示する。SidebarInset が右側ブロック（GlobalHeader + Pane 2/3/4）を担う。
-    // Cmd+B のキーバインドは SidebarProvider 側で標準実装されている。
-    // SidebarProvider のラッパー div は既定 `min-h-svh w-full`。雛形では
-    // ビューポート高に固定したいので h-screen を併記し、ペイン内で min-h-0 が
-    // 効くようにする（既存 ScrollArea の挙動と整合）。
     <SidebarProvider
       defaultOpen
       className="h-screen w-full overflow-hidden bg-background text-foreground"
     >
-      <PositionPane
+      <CategoryPane
         workspaceName={workspace.name}
-        departments={departments}
-        selectedPositionName={positionTitle}
-        onAddPosition={addPosition}
-        onDeletePosition={deletePosition}
+        categoryGroups={categoryGroups}
+        selectedCategoryId={selectedCategoryId}
+        activeTab={activeTab}
+        onSelectCategory={setSelectedCategoryId}
+        onAddCategory={addCategory}
+        onDeleteCategory={deleteCategory}
+        onAddCategoryGroup={addCategoryGroup}
+        onDeleteCategoryGroup={deleteCategoryGroup}
       />
       <SidebarInset className="flex min-w-0 flex-col bg-background">
         <GlobalHeader
-          departmentTitle={departmentTitle}
-          positionTitle={positionTitle}
-          candidateName={profile.name}
-          departments={departments}
-          onAddDepartment={addDepartment}
-          onDeleteDepartment={deleteDepartment}
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          categoryGroupName={selectedCategory?.group.name ?? "すべて"}
+          categoryName={selectedCategory?.category.name ?? "すべてのカテゴリ"}
+          taskTitle={activeTask?.meta.title ?? ""}
+          categoryGroups={categoryGroups}
+          onAddCategoryGroup={addCategoryGroup}
+          onDeleteCategoryGroup={deleteCategoryGroup}
         />
-        {/* SidebarInset 自体が <main> を出すので、内側は <div> で組み、
-            Pane 2 / Pane 3 / Pane 4 を横並びにする。 */}
         <div className="flex min-h-0 flex-1">
-          <CandidateListPane
-            groups={candidateGroups}
-            selectedCandidateId={selectedCandidateId}
-            onSelectCandidate={selectCandidate}
-            onAddCandidate={addCandidate}
-            onArchiveCandidate={archiveCandidate}
-            onRestoreCandidate={restoreCandidate}
-            onMoveCandidate={moveCandidate}
-          />
-          <CandidateDashboardPane
-            profile={profile}
-            scorecards={scorecards}
-            selectedDetail={selectedDetail}
-            onOpenDetail={openDetail}
-            setProfile={setProfile}
-            applicationInfoOpen={applicationInfoOpen}
-            onApplicationInfoOpenChange={setApplicationInfoOpen}
-            selectedCandidateId={selectedCandidateId}
-          />
-          <CandidateDetailPane
-            selectedCandidateId={selectedCandidateId}
-            scorecards={scorecards}
-            selectedDetail={selectedDetail}
-            scrollAnchor={scrollAnchor}
-            onScrollAnchorConsumed={consumeScrollAnchor}
-            onUpdateAxis={updateAxisScore}
-            onUpdateScorecardField={updateScorecardField}
-            pane4Open={pane4Open}
-            onTogglePane4={togglePane4}
-          />
+          {activeTab === "today" && (
+            <>
+              <TaskListPane
+                groups={taskGroups}
+                selectedTaskId={selectedTaskId}
+                reflection={reflection}
+                onSelectTask={selectTask}
+                onAddTask={addTask}
+                onArchiveTask={archiveTask}
+                onRestoreTask={restoreTask}
+                onMoveTask={moveTask}
+                onCheckTask={completeTask}
+                onUpdateReflection={updateReflection}
+              />
+              <TaskLogPane
+                task={activeTask}
+                categoryGroups={categoryGroups}
+                selectedLog={selectedLog}
+                scrollAnchor={scrollAnchor}
+                onScrollAnchorConsumed={consumeScrollAnchor}
+                onUpdateTaskMeta={updateTaskMeta}
+                onUpdateTaskCategoryId={updateTaskCategoryId}
+                onUpdateTaskSlot={updateTaskSlot}
+                onUpdateTaskDaysOfWeek={updateTaskDaysOfWeek}
+                onUpdateTaskLog={updateTaskLog}
+                onAddLog={addTaskLog}
+                onOpenLog={openLog}
+                onCompleteTask={completeTask}
+              />
+            </>
+          )}
+          {activeTab === "weekly" && (
+            <WeeklyPane
+              tasks={tasks}
+              selectedTaskId={selectedTaskId}
+              selectedCategoryId={selectedCategoryId}
+              onSelectTask={selectTask}
+            />
+          )}
+          {activeTab === "finance" && (
+            <FinancePane
+              transactions={transactions}
+              categoryGroups={categoryGroups}
+              selectedMonth={selectedMonth}
+              currentMonth={currentMonth}
+              onPrevMonth={handlePrevMonth}
+              onNextMonth={handleNextMonth}
+              onAddTransaction={addTransaction}
+              onDeleteTransaction={deleteTransaction}
+            />
+          )}
         </div>
       </SidebarInset>
     </SidebarProvider>

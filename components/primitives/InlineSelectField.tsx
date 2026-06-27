@@ -22,11 +22,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 
+export type InlineSelectOption = string | { value: string; label: string };
+
 export type InlineSelectFieldProps = {
   /** 現在の値（空文字で placeholder 表示） */
   value: string;
   /** 選択肢（順序が表示順、`readonly` 配列も受け取る） */
-  options: readonly string[];
+  options: readonly InlineSelectOption[];
   /** 選択時に呼ばれる */
   onSave: (v: string) => void;
   /** スクリーンリーダー向けラベル */
@@ -54,12 +56,17 @@ export function InlineSelectField({
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
       <SelectContent align="start">
-        {options.map((opt) => (
-          <SelectItem key={opt} value={opt}>
-            {opt}
-          </SelectItem>
-        ))}
+        {options.map((opt) => {
+          const optValue = typeof opt === "string" ? opt : opt.value;
+          const optLabel = typeof opt === "string" ? opt : opt.label;
+          return (
+            <SelectItem key={optValue} value={optValue}>
+              {optLabel}
+            </SelectItem>
+          );
+        })}
       </SelectContent>
     </Select>
   );
 }
+

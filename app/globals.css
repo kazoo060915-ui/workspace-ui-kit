@@ -77,6 +77,9 @@
   --shadow-opacity: var(--shadow-opacity);
   --color-shadow-color: var(--shadow-color);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-income: var(--income);
+  --color-income-foreground: var(--income-foreground);
+  --color-expense: var(--expense);
 }
 
 :root {
@@ -114,6 +117,9 @@
   --sidebar-border: oklch(0.9039 0.0029 84.5597);
   --sidebar-ring: oklch(0.3732 0.0635 258.276);
   --destructive-foreground: oklch(1 0 0);
+  --income: oklch(0.5274 0.1161 153.98);
+  --income-foreground: oklch(1 0 0);
+  --expense: oklch(0.5624 0.0956 20.5303);
   --font-sans:
     var(--font-inter), "Hiragino Sans", "BIZ UDPGothic", "Yu Gothic UI",
     system-ui, sans-serif;
@@ -160,6 +166,9 @@
   --accent: oklch(0.2972 0 0);
   --accent-foreground: oklch(0.9168 0.0035 67.7802);
   --destructive: oklch(0.6338 0.1208 21.0422);
+  --income: oklch(0.6554 0.1338 153.98);
+  --income-foreground: oklch(0.1567 0.0383 153.98);
+  --expense: oklch(0.6338 0.1208 21.0422);
   --border: oklch(0.3211 0 0);
   --input: oklch(0.3211 0 0);
   --ring: oklch(0.7441 0.1311 264.2789);

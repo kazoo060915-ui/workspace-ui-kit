@@ -2,17 +2,11 @@
 
 import { Settings } from "lucide-react";
 
-import { type Department } from "@/lib/schema";
-import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbLink,
-  BreadcrumbList,
-  BreadcrumbPage,
-  BreadcrumbSeparator,
-} from "@/components/ui/breadcrumb";
+import { type ActiveTab } from "@/components/workspace/Workspace";
+import { type CategoryGroup } from "@/lib/schema";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogTrigger } from "@/components/ui/dialog";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import {
   Tooltip,
   TooltipContent,
@@ -20,45 +14,53 @@ import {
 } from "@/components/ui/tooltip";
 import { SettingsDialogContent } from "@/components/workspace/SettingsDialog";
 
+const TAB_LABELS: Record<ActiveTab, string> = {
+  today: "今日",
+  weekly: "週間",
+  finance: "収支",
+};
+
 type GlobalHeaderProps = {
-  departmentTitle: string;
-  positionTitle: string;
-  candidateName: string;
-  departments: Department[];
-  onAddDepartment: (name: string) => void;
-  onDeleteDepartment: (deptId: string) => void;
+  activeTab: ActiveTab;
+  onTabChange: (tab: ActiveTab) => void;
+  categoryGroupName: string;
+  categoryName: string;
+  taskTitle: string;
+  categoryGroups: CategoryGroup[];
+  onAddCategoryGroup: (name: string) => void;
+  onDeleteCategoryGroup: (groupId: string) => void;
 };
 
 export function GlobalHeader({
-  departmentTitle,
-  positionTitle,
-  candidateName,
-  departments,
-  onAddDepartment,
-  onDeleteDepartment,
+  activeTab,
+  onTabChange,
+  categoryGroups,
+  onAddCategoryGroup,
+  onDeleteCategoryGroup,
 }: GlobalHeaderProps) {
   return (
-    <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border bg-background px-3">
-      <Breadcrumb
-        className="min-w-0 flex-1 overflow-hidden"
-        aria-label="パンくず"
+    <header className="flex h-12 shrink-0 items-center gap-3 border-b border-border bg-background px-4">
+      <ToggleGroup
+        value={[activeTab]}
+        onValueChange={(v) => {
+          const next = v[0];
+          if (next) onTabChange(next as ActiveTab);
+        }}
+        className="gap-0.5"
       >
-        <BreadcrumbList className="flex-nowrap text-[11px]">
-          <BreadcrumbItem className="shrink-0">
-            <BreadcrumbLink>{departmentTitle}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem className="shrink-0">
-            <BreadcrumbLink>{positionTitle}</BreadcrumbLink>
-          </BreadcrumbItem>
-          <BreadcrumbSeparator />
-          <BreadcrumbItem className="min-w-0">
-            <BreadcrumbPage className="truncate font-medium">
-              {candidateName}
-            </BreadcrumbPage>
-          </BreadcrumbItem>
-        </BreadcrumbList>
-      </Breadcrumb>
+        {(Object.keys(TAB_LABELS) as ActiveTab[]).map((tab) => (
+          <ToggleGroupItem
+            key={tab}
+            value={tab}
+            aria-label={TAB_LABELS[tab]}
+            className="h-7 rounded-md px-3 text-sm font-medium data-[state=on]:bg-primary data-[state=on]:text-primary-foreground"
+          >
+            {TAB_LABELS[tab]}
+          </ToggleGroupItem>
+        ))}
+      </ToggleGroup>
+
+      <div className="flex-1" />
 
       <Dialog>
         <Tooltip>
@@ -81,9 +83,9 @@ export function GlobalHeader({
           <TooltipContent side="bottom">ワークスペース設定</TooltipContent>
         </Tooltip>
         <SettingsDialogContent
-          departments={departments}
-          onAddDepartment={onAddDepartment}
-          onDeleteDepartment={onDeleteDepartment}
+          categoryGroups={categoryGroups}
+          onAddCategoryGroup={onAddCategoryGroup}
+          onDeleteCategoryGroup={onDeleteCategoryGroup}
         />
       </Dialog>
     </header>

@@ -1,56 +1,43 @@
-import { type Profile, type StageKey, type Scorecard } from "@/lib/schema";
-import { STAGE_LABELS } from "@/lib/labels";
+import { type Task, type TaskLog, type SlotKey } from "@/lib/schema";
 
 /**
- * 未作成ステージをクリックした時に Workspace が自動生成するための最小 Scorecard。
- * 全フィールド空（`deriveStageStatus` で pending 派生）。Pane 4 Mode 2 で inline edit すれば
- * 面接官アサインや日程設定ができる。
+ * 新規タスクの最小構成を生成するヘルパー。
+ * `addTask`（Workspace 本体）から参照する。
+ * すべてのフィールドは空・null 初期値で、Pane 3 の inline edit で埋める。
  */
-export function createMinimalScorecard(stage: StageKey): Scorecard {
+export function createMinimalTask(
+  title: string,
+  categoryId: string,
+  slot: SlotKey,
+): Task {
   return {
-    stage,
-    label: STAGE_LABELS[stage],
-    date: "",
-    format: "",
-    interviewer: "",
-    axisScores: {
-      achievements: null,
-      thinkingAbility: null,
-      communication: null,
-      cultureFit: null,
+    id: `t-${Date.now()}`,
+    categoryId,
+    slot,
+    daysOfWeek: [],
+    meta: {
+      title,
+      notes: "",
+      estimatedMinutes: null,
+      isRecurring: false,
     },
-    attachments: [],
+    logs: [],
+    archived: false,
   };
 }
 
 /**
- * c1 / c3 / c4 / c5 / c6 など「c2 以外の候補者」用の最小 Profile 生成ヘルパー。
- * ADR-0014 で Profile が 12 フィールド最小構成になり、avatar 頭文字は
- * 呼び出し側で `name[0]` 派生に統一されたため、`initial` 引数は削除済み。
- * 氏名以外は空文字に揃え、Pane 3 / Pane 4 では空欄として可視化される。
- *
- * `addCandidate`（Workspace 本体）からも参照されるため export する。
+ * タスクログ（実行記録）の最小構成を生成するヘルパー。
+ * `addTaskLog`（Workspace 本体）から参照する。
+ * 日付は今日の ISO 文字列（YYYY-MM-DD）を自動セット。
  */
-export function createMinimalProfile(name: string): Profile {
+export function createMinimalTaskLog(date?: string): TaskLog {
+  const today = date ?? new Date().toISOString().slice(0, 10);
   return {
-    // プロフィール (3)
-    name,
-    birthday: "",
-    source: "",
-
-    // 連絡先 (3)
-    email: "",
-    phone: "",
-    address: "",
-
-    // 選考状況 (4)
-    recruiter: "",
-    desiredSalaryMin: "",
-    desiredSalaryMax: "",
-    availableStartDate: "",
-
-    // 読み物 (2)
-    careerText: "",
-    motivationFull: "",
+    id: `log-${Date.now()}`,
+    date: today,
+    actualMinutes: null,
+    memo: "",
+    reflection: "",
   };
 }

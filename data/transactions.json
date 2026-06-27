@@ -1,0 +1,15 @@
+[
+  { "id": "tx1", "month": "2026-06", "type": "income", "amount": 30000, "categoryId": "cat1", "memo": "6月 胃トレクラブ月会費" },
+  { "id": "tx2", "month": "2026-06", "type": "income", "amount": 15000, "categoryId": "cat2", "memo": "個別相談 3件" },
+  { "id": "tx3", "month": "2026-06", "type": "income", "amount": 20000, "categoryId": "cat3", "memo": "整体施術 2件" },
+  { "id": "tx4", "month": "2026-06", "type": "income", "amount": 3500, "categoryId": "cat4", "memo": "YouTube 広告収益" },
+  { "id": "tx5", "month": "2026-06", "type": "expense", "amount": 5000, "categoryId": "cat1", "memo": "教材購入" },
+  { "id": "tx6", "month": "2026-05", "type": "income", "amount": 28000, "categoryId": "cat1", "memo": "5月 胃トレクラブ月会費" },
+  { "id": "tx7", "month": "2026-05", "type": "income", "amount": 20000, "categoryId": "cat2", "memo": "個別相談 4件" },
+  { "id": "tx8", "month": "2026-05", "type": "income", "amount": 25000, "categoryId": "cat3", "memo": "整体施術 3件" },
+  { "id": "tx9", "month": "2026-05", "type": "income", "amount": 2800, "categoryId": "cat4", "memo": "YouTube 広告収益" },
+  { "id": "tx10", "month": "2026-04", "type": "income", "amount": 25000, "categoryId": "cat1", "memo": "4月 胃トレクラブ月会費" },
+  { "id": "tx11", "month": "2026-04", "type": "income", "amount": 10000, "categoryId": "cat2", "memo": "個別相談 2件" },
+  { "id": "tx12", "month": "2026-04", "type": "income", "amount": 30000, "categoryId": "cat3", "memo": "整体施術 4件" },
+  { "id": "tx13", "month": "2026-04", "type": "income", "amount": 4200, "categoryId": "cat4", "memo": "YouTube 広告収益" }
+]

@@ -1,0 +1,35 @@
+[
+  {
+    "id": "g1",
+    "name": "副業",
+    "categories": [
+      { "id": "cat1", "name": "胃のトレーニングクラブ" },
+      { "id": "cat2", "name": "個別相談" },
+      { "id": "cat3", "name": "中医整体" },
+      { "id": "cat4", "name": "YouTube" }
+    ]
+  },
+  {
+    "id": "g2",
+    "name": "自己投資",
+    "categories": [
+      { "id": "cat5", "name": "読書" },
+      { "id": "cat6", "name": "運動" },
+      { "id": "cat7", "name": "中医心理学" },
+      { "id": "cat8", "name": "AI Driven School" },
+      { "id": "cat9", "name": "パワスクプレミアム" }
+    ]
+  },
+  {
+    "id": "g3",
+    "name": "経費",
+    "categories": [
+      { "id": "cat10", "name": "AIツール" },
+      { "id": "cat11", "name": "通信・ツール" },
+      { "id": "cat12", "name": "外注費" },
+      { "id": "cat13", "name": "学習費" },
+      { "id": "cat14", "name": "オンラインサロン" },
+      { "id": "cat15", "name": "その他経費" }
+    ]
+  }
+]
