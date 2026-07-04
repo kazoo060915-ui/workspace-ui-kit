@@ -17,13 +17,14 @@ export async function dbAddTask(task: {
   slot: SlotKey;
   position: number;
   title: string;
+  daysOfWeek: number[];
 }): Promise<void> {
   const { error } = await supabase.from("tasks").insert({
     id: task.id,
     category_id: task.categoryId,
     slot: task.slot,
     position: task.position,
-    days_of_week: [],
+    days_of_week: task.daysOfWeek,
     title: task.title,
     notes: "",
     estimated_minutes: null,

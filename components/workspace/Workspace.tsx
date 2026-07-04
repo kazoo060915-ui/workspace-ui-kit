@@ -253,7 +253,14 @@ export function Workspace({
       const newTask = createMinimalTask(title, categoryId, slot);
       setTasks((prev) => {
         const position = prev.filter((t) => t.slot === slot && !t.archived).length;
-        dbAddTask({ id: newTask.id, categoryId, slot, position, title });
+        dbAddTask({
+          id: newTask.id,
+          categoryId,
+          slot,
+          position,
+          title,
+          daysOfWeek: newTask.daysOfWeek,
+        });
         return [...prev, newTask];
       });
       setSelectedTaskId(newTask.id);

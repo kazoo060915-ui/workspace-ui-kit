@@ -10,11 +10,15 @@ export function createMinimalTask(
   categoryId: string,
   slot: SlotKey,
 ): Task {
+  const todayDow = new Date().getDay();
+  const initialDaysOfWeek =
+    slot === "morning" || slot === "evening" ? [todayDow] : [];
+
   return {
     id: `t-${Date.now()}`,
     categoryId,
     slot,
-    daysOfWeek: [],
+    daysOfWeek: initialDaysOfWeek,
     meta: {
       title,
       notes: "",
