@@ -248,25 +248,45 @@ export function Workspace({
   }, []);
 
   const addTask = useCallback(
-    (title: string, slot: SlotKey) => {
-      const categoryId =
-        selectedCategoryId ?? categoryGroups[0]?.categories[0]?.id ?? "";
+    (title: string, slot: SlotKey, daysOfWeekOverride?: number[]) => {
+      const firstCategoryId = categoryGroups.flatMap((group) => group.categories)[0]?.id ?? "";
+      const categoryId = selectedCategoryId ?? firstCategoryId;
+      if (!categoryId) {
+        if (typeof window !== "undefined") {
+          window.alert("カテゴリが見つからないため、先にカテゴリを追加してください。");
+        }
+        return;
+      }
+
+      const fallbackDaysOfWeek =
+        slot === "morning" || slot === "evening" ? [new Date().getDay()] : [];
       const newTask = createMinimalTask(title, categoryId, slot);
-      setTasks((prev) => {
-        const position = prev.filter((t) => t.slot === slot && !t.archived).length;
-        dbAddTask({
+      const newTaskWithDays: Task = {
+        ...newTask,
+        daysOfWeek: daysOfWeekOverride ?? fallbackDaysOfWeek,
+      };
+      const position = tasks.filter((t) => t.slot === slot && !t.archived).length;
+      setTasks((prev) => [...prev, newTaskWithDays]);
+      setSelectedTaskId(newTask.id);
+
+      void (async () => {
+        const saved = await dbAddTask({
           id: newTask.id,
           categoryId,
           slot,
           position,
           title,
-          daysOfWeek: newTask.daysOfWeek,
+          daysOfWeek: newTaskWithDays.daysOfWeek,
         });
-        return [...prev, newTask];
-      });
-      setSelectedTaskId(newTask.id);
+        if (saved) return;
+        setTasks((prev) => prev.filter((task) => task.id !== newTask.id));
+        setSelectedTaskId((prevId) => (prevId === newTask.id ? "" : prevId));
+        if (typeof window !== "undefined") {
+          window.alert("タスク保存に失敗しました。接続設定（Supabase）を確認してください。");
+        }
+      })();
     },
-    [selectedCategoryId, categoryGroups],
+    [selectedCategoryId, categoryGroups, tasks],
   );
 
   const archiveTask = useCallback((id: string) => {

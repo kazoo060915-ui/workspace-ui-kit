@@ -105,7 +105,7 @@ type TaskListPaneProps = {
   selectedTaskId: string;
   reflection: DailyReflection;
   onSelectTask: (id: string) => void;
-  onAddTask: (title: string, slot: SlotKey) => void;
+  onAddTask: (title: string, slot: SlotKey, daysOfWeek?: number[]) => void;
   onArchiveTask: (id: string) => void;
   onRestoreTask: (id: string) => void;
   onMoveTask: (id: string, toSlot: SlotKey, toIndex: number) => void;
@@ -125,6 +125,7 @@ export function TaskListPane({
   onCheckTask,
   onUpdateReflection,
 }: TaskListPaneProps) {
+  const todayDow = new Date().getDay();
   const [addDialogSlot, setAddDialogSlot] = useState<{
     slot: SlotKey;
     label: string;
@@ -343,6 +344,18 @@ export function TaskListPane({
           fieldLabel="タスク名"
           fieldId="task-title"
           placeholder="例: AI Driven School の課題を進める"
+          enableDaysOfWeekPicker={
+            addDialogSlot.slot === "morning" || addDialogSlot.slot === "evening"
+          }
+          defaultDaysOfWeek={
+            addDialogSlot.slot === "morning" || addDialogSlot.slot === "evening"
+              ? [todayDow]
+              : []
+          }
+          onAddWithDaysOfWeek={(title, daysOfWeek) => {
+            onAddTask(title, addDialogSlot.slot, daysOfWeek);
+            setAddDialogSlot(null);
+          }}
           onAdd={(title) => {
             onAddTask(title, addDialogSlot.slot);
             setAddDialogSlot(null);

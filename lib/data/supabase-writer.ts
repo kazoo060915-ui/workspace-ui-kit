@@ -18,7 +18,7 @@ export async function dbAddTask(task: {
   position: number;
   title: string;
   daysOfWeek: number[];
-}): Promise<void> {
+}): Promise<boolean> {
   const { error } = await supabase.from("tasks").insert({
     id: task.id,
     category_id: task.categoryId,
@@ -31,7 +31,11 @@ export async function dbAddTask(task: {
     is_recurring: false,
     archived: false,
   });
-  if (error) console.error("dbAddTask:", error.message);
+  if (error) {
+    console.error("dbAddTask:", error.message);
+    return false;
+  }
+  return true;
 }
 
 export async function dbArchiveTask(id: string, archivedAt: string): Promise<void> {

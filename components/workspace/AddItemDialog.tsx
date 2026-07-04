@@ -24,7 +24,20 @@ type AddItemDialogProps = {
   fieldId: string;
   placeholder: string;
   onAdd: (name: string) => void;
+  enableDaysOfWeekPicker?: boolean;
+  defaultDaysOfWeek?: number[];
+  onAddWithDaysOfWeek?: (name: string, daysOfWeek: number[]) => void;
 };
+
+const DAY_OPTIONS = [
+  { dow: 1, label: "月" },
+  { dow: 2, label: "火" },
+  { dow: 3, label: "水" },
+  { dow: 4, label: "木" },
+  { dow: 5, label: "金" },
+  { dow: 6, label: "土" },
+  { dow: 0, label: "日" },
+] as const;
 
 export function AddItemDialog({
   open,
@@ -35,14 +48,24 @@ export function AddItemDialog({
   fieldId,
   placeholder,
   onAdd,
+  enableDaysOfWeekPicker = false,
+  defaultDaysOfWeek = [],
+  onAddWithDaysOfWeek,
 }: AddItemDialogProps) {
+  const sortedDefaultDays = [...defaultDaysOfWeek].sort((a, b) => a - b);
   const [name, setName] = useState("");
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>(sortedDefaultDays);
 
   const handleSubmit = () => {
     const trimmed = name.trim();
     if (!trimmed) return;
-    onAdd(trimmed);
+    if (enableDaysOfWeekPicker && onAddWithDaysOfWeek) {
+      onAddWithDaysOfWeek(trimmed, daysOfWeek);
+    } else {
+      onAdd(trimmed);
+    }
     setName("");
+    setDaysOfWeek(sortedDefaultDays);
     onOpenChange(false);
   };
 
@@ -51,7 +74,10 @@ export function AddItemDialog({
       open={open}
       onOpenChange={(v) => {
         onOpenChange(v);
-        if (!v) setName("");
+        if (!v) {
+          setName("");
+          setDaysOfWeek(sortedDefaultDays);
+        }
       }}
     >
       <DialogContent className="sm:max-w-sm">
@@ -73,10 +99,41 @@ export function AddItemDialog({
               placeholder={placeholder}
             />
           </Field>
+          {enableDaysOfWeekPicker && (
+            <Field>
+              <FieldLabel>曜日</FieldLabel>
+              <div className="flex flex-wrap gap-1.5">
+                {DAY_OPTIONS.map((day) => {
+                  const active = daysOfWeek.includes(day.dow);
+                  return (
+                    <Button
+                      key={day.dow}
+                      type="button"
+                      variant={active ? "default" : "outline"}
+                      size="sm"
+                      onClick={() =>
+                        setDaysOfWeek((prev) =>
+                          prev.includes(day.dow)
+                            ? prev.filter((d) => d !== day.dow)
+                            : [...prev, day.dow].sort((a, b) => a - b),
+                        )
+                      }
+                      aria-pressed={active}
+                    >
+                      {day.label}
+                    </Button>
+                  );
+                })}
+              </div>
+            </Field>
+          )}
         </FieldGroup>
         <DialogFooter>
           <DialogClose render={<Button variant="outline">キャンセル</Button>} />
-          <Button onClick={handleSubmit} disabled={!name.trim()}>
+          <Button
+            onClick={handleSubmit}
+            disabled={!name.trim() || (enableDaysOfWeekPicker && daysOfWeek.length === 0)}
+          >
             追加
           </Button>
         </DialogFooter>
