@@ -41,6 +41,7 @@ import {
   dbMoveTask,
   dbCompleteTask,
   dbDeleteTask,
+  dbUpdateTaskDaysOfWeek,
   dbAddTransaction,
   dbDeleteTransaction,
 } from "@/lib/data/supabase-writer";
@@ -335,6 +336,15 @@ export function Workspace({
     dbCompleteTask(taskId, completedAt);
   }, []);
 
+  const updateTaskDaysOfWeek = useCallback((taskId: string, daysOfWeek: number[]) => {
+    setTasks((prev) =>
+      prev.map((task) =>
+        task.id === taskId ? { ...task, daysOfWeek } : task,
+      ),
+    );
+    dbUpdateTaskDaysOfWeek(taskId, daysOfWeek);
+  }, []);
+
   const updateReflection = useCallback(
     (field: "item1", value: string) => {
       setReflection((prev) => ({ ...prev, [field]: value }));
@@ -392,6 +402,7 @@ export function Workspace({
               selectedTaskId={selectedTaskId}
               selectedCategoryId={selectedCategoryId}
               onSelectTask={selectTask}
+              onUpdateTaskDaysOfWeek={updateTaskDaysOfWeek}
             />
           )}
           {activeTab === "finance" && (

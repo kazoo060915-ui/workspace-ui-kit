@@ -39,11 +39,27 @@ type WeeklyPaneProps = {
   selectedTaskId: string;
   selectedCategoryId: string | null;
   onSelectTask: (id: string) => void;
+  onUpdateTaskDaysOfWeek: (taskId: string, daysOfWeek: number[]) => void;
 };
 
-export function WeeklyPane({ tasks, selectedTaskId, selectedCategoryId, onSelectTask }: WeeklyPaneProps) {
+export function WeeklyPane({
+  tasks,
+  selectedTaskId,
+  selectedCategoryId,
+  onSelectTask,
+  onUpdateTaskDaysOfWeek,
+}: WeeklyPaneProps) {
   const todayDow = useMemo(() => new Date().getDay(), []);
   const [mobileDow, setMobileDow] = useState(todayDow);
+  const selectedTask = useMemo(
+    () => tasks.find((task) => task.id === selectedTaskId) ?? null,
+    [tasks, selectedTaskId],
+  );
+
+  const editableTask =
+    selectedTask && !selectedTask.archived && selectedTask.slot !== "done"
+      ? selectedTask
+      : null;
 
   // slot × dow のマップを事前計算（カテゴリフィルタを含む）
   const grid = useMemo(() => {
@@ -68,10 +84,45 @@ export function WeeklyPane({ tasks, selectedTaskId, selectedCategoryId, onSelect
       {/* ヘッダー */}
       <header className="flex h-12 shrink-0 items-center border-b border-border px-5">
         <h2 className="text-sm font-semibold">週間スケジュール</h2>
-        <span className="ml-2 text-xs text-muted-foreground">
-          （読み取り専用 — 曜日割り当ての編集は現在停止中です）
-        </span>
       </header>
+      <div className="flex flex-col gap-2 border-b border-border px-5 py-2.5">
+        <p className="text-xs font-medium text-muted-foreground">
+          選択中タスクの曜日割り当て
+        </p>
+        {editableTask ? (
+          <div className="flex flex-wrap items-center gap-1.5">
+            {DOW_COLS.map((col) => {
+              const active = editableTask.daysOfWeek.includes(col.dow);
+              return (
+                <button
+                  key={col.dow}
+                  type="button"
+                  onClick={() => {
+                    const next = active
+                      ? editableTask.daysOfWeek.filter((d) => d !== col.dow)
+                      : [...editableTask.daysOfWeek, col.dow].sort((a, b) => a - b);
+                    onUpdateTaskDaysOfWeek(editableTask.id, next);
+                  }}
+                  className={cn(
+                    "rounded-md border px-2 py-1 text-xs transition-colors",
+                    active
+                      ? "border-primary bg-primary/10 text-primary"
+                      : "border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground",
+                  )}
+                  aria-pressed={active}
+                  aria-label={`${col.label}曜日を${active ? "解除" : "追加"}`}
+                >
+                  {col.label}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            週間に表示されるタスク（未完了・未アーカイブ）を選ぶと、ここで曜日を変更できます。
+          </p>
+        )}
+      </div>
 
       <ScrollArea className="min-h-0 flex-1">
         <div className="p-3 md:p-4">
