@@ -24,31 +24,23 @@
  * ```
  */
 
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect } from "react";
 
 import {
   type CategoryGroup,
   type Task,
-  type TaskMeta,
-  type TaskLog,
   type SlotKey,
-  type SelectedLog,
   type Transaction,
 } from "@/lib/schema";
 import { type DailyReflection } from "@/lib/data/supabase-loader";
-import { createMinimalTask, createMinimalTaskLog } from "@/lib/data/factories";
+import { createMinimalTask } from "@/lib/data/factories";
 import {
   dbAddTask,
   dbArchiveTask,
   dbRestoreTask,
   dbMoveTask,
-  dbUpdateTaskMeta,
-  dbUpdateTaskCategoryId,
-  dbUpdateTaskSlot,
-  dbUpdateTaskDaysOfWeek,
   dbCompleteTask,
-  dbAddTaskLog,
-  dbUpdateTaskLog,
+  dbDeleteTask,
   dbAddTransaction,
   dbDeleteTransaction,
 } from "@/lib/data/supabase-writer";
@@ -59,7 +51,6 @@ import { GlobalHeader } from "@/components/workspace/GlobalHeader";
 import { CategoryPane } from "@/components/workspace/CategoryPane";
 import { TaskListPane } from "@/components/workspace/TaskListPane";
 import { WeeklyPane } from "@/components/workspace/WeeklyPane";
-import { TaskLogPane } from "@/components/workspace/TaskLogPane";
 import { FinancePane } from "@/components/workspace/FinancePane";
 
 export type ActiveTab = "today" | "weekly" | "finance";
@@ -79,6 +70,35 @@ export function Workspace({
   initialReflection,
   workspace,
 }: WorkspaceProps) {
+  const toLocalDateKey = useCallback((timestamp: string): string => {
+    const date = new Date(timestamp);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toLocaleDateString("sv-SE");
+  }, []);
+
+  const todayDateKey = useMemo(
+    () => new Date().toLocaleDateString("sv-SE"),
+    [],
+  );
+  const shouldAutoDeleteTask = useCallback(
+    (task: Task) => {
+      const timestamp =
+        task.archived
+          ? task.archivedAt ?? task.completedAt
+          : task.slot === "done"
+            ? task.completedAt ?? task.archivedAt
+            : null;
+      if (!timestamp) return false;
+      const taskDate = toLocalDateKey(timestamp);
+      if (!taskDate) return false;
+      return taskDate < todayDateKey;
+    },
+    [todayDateKey, toLocalDateKey],
+  );
+  const initialExpiredTaskIds = useMemo(
+    () => initialTasks.filter(shouldAutoDeleteTask).map((task) => task.id),
+    [initialTasks, shouldAutoDeleteTask],
+  );
   const [categoryGroups, setCategoryGroups] =
     useState<CategoryGroup[]>(initialCategoryGroups);
   const [tasks, setTasks] = useState<Task[]>(initialTasks);
@@ -93,8 +113,6 @@ export function Workspace({
   const [selectedTaskId, setSelectedTaskId] = useState<string>(
     initialTasks[0]?.id ?? "",
   );
-  const [selectedLog, setSelectedLog] = useState<SelectedLog>(null);
-  const [scrollAnchor, setScrollAnchor] = useState<string | null>(null);
 
   // アクティブタスク
   const activeTask =
@@ -108,6 +126,34 @@ export function Workspace({
     () => buildTodayTaskGroups(tasks, todayDow, selectedCategoryId),
     [tasks, todayDow, selectedCategoryId],
   );
+
+  useEffect(() => {
+    let cancelled = false;
+    if (initialExpiredTaskIds.length === 0) return;
+
+    const cleanupExpiredTasks = async () => {
+      const deletedTaskIds: string[] = [];
+
+      for (const taskId of initialExpiredTaskIds) {
+        const deleted = await dbDeleteTask(taskId);
+        if (deleted) deletedTaskIds.push(taskId);
+      }
+
+      if (cancelled || deletedTaskIds.length === 0) return;
+
+      const deletedTaskSet = new Set(deletedTaskIds);
+      setTasks((prev) => prev.filter((task) => !deletedTaskSet.has(task.id)));
+      setSelectedTaskId((prevId) => {
+        if (!deletedTaskSet.has(prevId)) return prevId;
+        return initialTasks.find((task) => !deletedTaskSet.has(task.id))?.id ?? "";
+      });
+    };
+
+    void cleanupExpiredTasks();
+    return () => {
+      cancelled = true;
+    };
+  }, [initialExpiredTaskIds, initialTasks]);
 
   // ===== カテゴリ情報（GlobalHeader 用）=====
 
@@ -198,7 +244,6 @@ export function Workspace({
 
   const selectTask = useCallback((id: string) => {
     setSelectedTaskId(id);
-    setSelectedLog(null);
   }, []);
 
   const addTask = useCallback(
@@ -212,14 +257,16 @@ export function Workspace({
         return [...prev, newTask];
       });
       setSelectedTaskId(newTask.id);
-      setSelectedLog(null);
     },
     [selectedCategoryId, categoryGroups],
   );
 
   const archiveTask = useCallback((id: string) => {
+    const archivedAt = new Date().toISOString();
     setTasks((prev) => {
-      const next = prev.map((t) => (t.id === id ? { ...t, archived: true } : t));
+      const next = prev.map((t) =>
+        t.id === id ? { ...t, archived: true, archivedAt } : t,
+      );
       // フォールバック先を最新 prev から探す（stale closure を避ける）
       setSelectedTaskId((prevId) => {
         if (prevId !== id) return prevId;
@@ -228,13 +275,14 @@ export function Workspace({
       });
       return next;
     });
-    setSelectedLog(null);
-    dbArchiveTask(id);
+    dbArchiveTask(id, archivedAt);
   }, []);
 
   const restoreTask = useCallback((id: string) => {
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, archived: false } : t)),
+      prev.map((t) =>
+        t.id === id ? { ...t, archived: false, archivedAt: null } : t,
+      ),
     );
     dbRestoreTask(id);
   }, []);
@@ -270,97 +318,18 @@ export function Workspace({
     });
   }, []);
 
-  const updateTaskDaysOfWeek = useCallback((taskId: string, daysOfWeek: number[]) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, daysOfWeek } : t)),
-    );
-    dbUpdateTaskDaysOfWeek(taskId, daysOfWeek);
-  }, []);
-
-  // ===== タスクメタ編集 =====
-
-  const updateTaskMeta = useCallback(
-    <K extends keyof TaskMeta>(taskId: string, key: K, value: TaskMeta[K]) => {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskId ? { ...t, meta: { ...t.meta, [key]: value } } : t,
-        ),
-      );
-      dbUpdateTaskMeta(taskId, key, value);
-    },
-    [],
-  );
-
-  const updateTaskCategoryId = useCallback((taskId: string, categoryId: string) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, categoryId } : t)),
-    );
-    dbUpdateTaskCategoryId(taskId, categoryId);
-  }, []);
-
-  const updateTaskSlot = useCallback((taskId: string, slot: SlotKey) => {
-    setTasks((prev) =>
-      prev.map((t) => (t.id === taskId ? { ...t, slot } : t)),
-    );
-    dbUpdateTaskSlot(taskId, slot);
-  }, []);
-
-  // ===== ログ操作 =====
-
-  const openLog = useCallback((next: SelectedLog, anchor?: string) => {
-    setSelectedLog(next);
-    setScrollAnchor(anchor ?? null);
-  }, []);
-
-  const addTaskLog = useCallback((taskId: string) => {
-    const newLog = createMinimalTaskLog();
-    setTasks((prev) =>
-      prev.map((t) =>
-        t.id === taskId ? { ...t, logs: [...t.logs, newLog] } : t,
-      ),
-    );
-    setSelectedLog({ type: "log", logId: newLog.id });
-    dbAddTaskLog(taskId, newLog);
-  }, []);
-
-  const updateTaskLog = useCallback(
-    <K extends keyof TaskLog>(
-      taskId: string,
-      logId: string,
-      key: K,
-      value: TaskLog[K],
-    ) => {
-      setTasks((prev) =>
-        prev.map((t) =>
-          t.id === taskId
-            ? {
-                ...t,
-                logs: t.logs.map((l) =>
-                  l.id === logId ? { ...l, [key]: value } : l,
-                ),
-              }
-            : t,
-        ),
-      );
-      dbUpdateTaskLog(logId, key, value);
-    },
-    [],
-  );
-
   const completeTask = useCallback((taskId: string) => {
+    const completedAt = new Date().toISOString();
     setTasks((prev) =>
       prev.map((t) =>
-        t.id === taskId ? { ...t, slot: "done" as SlotKey } : t,
+        t.id === taskId ? { ...t, slot: "done" as SlotKey, completedAt } : t,
       ),
     );
-    setSelectedLog(null);
-    dbCompleteTask(taskId);
+    dbCompleteTask(taskId, completedAt);
   }, []);
-
-  const consumeScrollAnchor = useCallback(() => setScrollAnchor(null), []);
 
   const updateReflection = useCallback(
-    (field: "item1" | "item2" | "item3", value: string) => {
+    (field: "item1", value: string) => {
       setReflection((prev) => ({ ...prev, [field]: value }));
     },
     [],
@@ -370,7 +339,7 @@ export function Workspace({
 
   return (
     <SidebarProvider
-      defaultOpen
+      defaultOpen={false}
       className="h-screen w-full overflow-hidden bg-background text-foreground"
     >
       <CategoryPane
@@ -397,35 +366,18 @@ export function Workspace({
         />
         <div className="flex min-h-0 flex-1">
           {activeTab === "today" && (
-            <>
-              <TaskListPane
-                groups={taskGroups}
-                selectedTaskId={selectedTaskId}
-                reflection={reflection}
-                onSelectTask={selectTask}
-                onAddTask={addTask}
-                onArchiveTask={archiveTask}
-                onRestoreTask={restoreTask}
-                onMoveTask={moveTask}
-                onCheckTask={completeTask}
-                onUpdateReflection={updateReflection}
-              />
-              <TaskLogPane
-                task={activeTask}
-                categoryGroups={categoryGroups}
-                selectedLog={selectedLog}
-                scrollAnchor={scrollAnchor}
-                onScrollAnchorConsumed={consumeScrollAnchor}
-                onUpdateTaskMeta={updateTaskMeta}
-                onUpdateTaskCategoryId={updateTaskCategoryId}
-                onUpdateTaskSlot={updateTaskSlot}
-                onUpdateTaskDaysOfWeek={updateTaskDaysOfWeek}
-                onUpdateTaskLog={updateTaskLog}
-                onAddLog={addTaskLog}
-                onOpenLog={openLog}
-                onCompleteTask={completeTask}
-              />
-            </>
+            <TaskListPane
+              groups={taskGroups}
+              selectedTaskId={selectedTaskId}
+              reflection={reflection}
+              onSelectTask={selectTask}
+              onAddTask={addTask}
+              onArchiveTask={archiveTask}
+              onRestoreTask={restoreTask}
+              onMoveTask={moveTask}
+              onCheckTask={completeTask}
+              onUpdateReflection={updateReflection}
+            />
           )}
           {activeTab === "weekly" && (
             <WeeklyPane

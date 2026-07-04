@@ -85,6 +85,8 @@ export const taskSchema = z.object({
   meta: taskMetaSchema,
   logs: z.array(taskLogSchema).default([]),
   archived: z.boolean().default(false),
+  completedAt: z.string().nullable().default(null),
+  archivedAt: z.string().nullable().default(null),
 });
 export type Task = z.infer<typeof taskSchema>;
 

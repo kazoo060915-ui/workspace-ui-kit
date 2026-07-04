@@ -23,6 +23,8 @@ export function createMinimalTask(
     },
     logs: [],
     archived: false,
+    completedAt: null,
+    archivedAt: null,
   };
 }
 

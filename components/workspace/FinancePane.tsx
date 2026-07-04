@@ -95,7 +95,7 @@ export function FinancePane({
   return (
     <section className="flex min-w-0 flex-1 flex-col bg-background">
       {/* ヘッダー + 月ナビ */}
-      <header className="flex h-12 shrink-0 items-center justify-between gap-3 border-b border-border px-5">
+      <header className="flex min-h-12 shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-2 md:px-5">
         <div className="flex items-center gap-2">
           <Button
             variant="ghost"
@@ -126,19 +126,19 @@ export function FinancePane({
       </header>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-6 p-5">
+        <div className="flex flex-col gap-6 p-4 md:p-5">
           {/* === Hero: 純利益 === */}
           <div className="flex flex-col items-center gap-1 rounded-xl border border-border bg-card py-8">
             <p className="text-xs text-muted-foreground">今月の純利益</p>
             <p
               className={cn(
-                "text-5xl font-bold tabular-nums",
+                "text-4xl font-bold tabular-nums md:text-5xl",
                 summary.net >= 0 ? "text-income" : "text-expense",
               )}
             >
               {formatAmount(summary.net)}
             </p>
-            <div className="mt-3 flex gap-5 text-sm">
+            <div className="mt-3 flex flex-wrap justify-center gap-3 text-sm md:gap-5">
               <span className="flex items-center gap-1.5 text-income">
                 <span className="size-2 rounded-full bg-income" />
                 収入 {formatAmount(summary.income)}
@@ -158,7 +158,7 @@ export function FinancePane({
                 月次トレンド
               </p>
             </div>
-            <div className="grid grid-cols-3 gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               {trend.map((item) => (
                 <div
                   key={item.month}
@@ -297,7 +297,7 @@ export function FinancePane({
                       <Button
                         variant="ghost"
                         size="icon-xs"
-                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100"
+                        className="shrink-0 opacity-0 transition-opacity group-hover:opacity-100 [@media(pointer:coarse)]:opacity-100"
                         aria-label="この明細を削除"
                         onClick={() => onDeleteTransaction(tx.id)}
                       >

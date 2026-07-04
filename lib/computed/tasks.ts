@@ -39,7 +39,7 @@ export function colIndexToDow(colIndex: number): number {
 /**
  * 今日タブ用の TaskGroup[] を生成する純関数。
  * slot===morning/evening は daysOfWeek に todayDow が含まれるものだけ表示する。
- * backlog は全件表示（常時表示）。holiday/done/archived は別扱い。
+ * backlog は今日タブでは非表示。done/archived は別扱い。
  */
 export function buildTodayTaskGroups(
   tasks: Task[],
@@ -69,21 +69,6 @@ export function buildTodayTaskGroups(
         estimatedMinutes: t.meta.estimatedMinutes,
       })),
   }));
-
-  // バックログは曜日フィルタなし（常時表示）
-  const backlogItems = tasks
-    .filter((t) => !t.archived && t.slot === "backlog" && categoryFilter(t))
-    .map((t) => ({
-      id: t.id,
-      title: t.meta.title,
-      estimatedMinutes: t.meta.estimatedMinutes,
-    }));
-  slotGroups.push({
-    kind: "slot" as const,
-    slot: "backlog" as SlotKey,
-    label: SLOT_LABELS.backlog,
-    items: backlogItems,
-  });
 
   // 完了グループは非空のときのみ
   const doneItems = tasks

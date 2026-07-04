@@ -24,6 +24,8 @@ export async function loadTasks(): Promise<Task[]> {
     slot: row.slot,
     daysOfWeek: row.days_of_week ?? [],
     archived: row.archived,
+    completedAt: row.completed_at ?? null,
+    archivedAt: row.archived_at ?? null,
     meta: {
       title: row.title,
       notes: row.notes ?? "",

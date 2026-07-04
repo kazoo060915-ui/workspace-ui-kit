@@ -58,6 +58,48 @@ const screenReaderInstructions: ScreenReaderInstructions = {
     "Space または Enter でタスクを持ち上げ、矢印キーで移動、Space で確定、Esc でキャンセルします。",
 };
 
+const SLOT_HEADER_THEME: Record<
+  SlotKey,
+  { header: string; title: string; badge: string; addButton: string }
+> = {
+  morning: {
+    header: "bg-chart-3/15 border-chart-3/35",
+    title: "text-chart-3",
+    badge: "bg-chart-3/20 text-chart-3 border border-chart-3/30",
+    addButton: "text-chart-3/80 hover:text-chart-3",
+  },
+  evening: {
+    header: "bg-chart-1/15 border-chart-1/35",
+    title: "text-chart-1",
+    badge: "bg-chart-1/20 text-chart-1 border border-chart-1/30",
+    addButton: "text-chart-1/80 hover:text-chart-1",
+  },
+  holiday: {
+    header: "bg-chart-4/15 border-chart-4/35",
+    title: "text-chart-4",
+    badge: "bg-chart-4/20 text-chart-4 border border-chart-4/30",
+    addButton: "text-chart-4/80 hover:text-chart-4",
+  },
+  backlog: {
+    header: "bg-chart-2/15 border-chart-2/35",
+    title: "text-chart-2",
+    badge: "bg-chart-2/20 text-chart-2 border border-chart-2/30",
+    addButton: "text-chart-2/80 hover:text-chart-2",
+  },
+  done: {
+    header: "bg-income/10 border-income/30",
+    title: "text-income",
+    badge: "bg-income/20 text-income border border-income/30",
+    addButton: "text-income/80 hover:text-income",
+  },
+};
+
+const ARCHIVED_HEADER_THEME = {
+  header: "bg-muted border-border",
+  title: "text-muted-foreground",
+  badge: "bg-muted-foreground/15 text-muted-foreground border border-muted-foreground/20",
+};
+
 type TaskListPaneProps = {
   groups: TaskGroup[];
   selectedTaskId: string;
@@ -68,7 +110,7 @@ type TaskListPaneProps = {
   onRestoreTask: (id: string) => void;
   onMoveTask: (id: string, toSlot: SlotKey, toIndex: number) => void;
   onCheckTask?: (id: string) => void;
-  onUpdateReflection: (field: "item1" | "item2" | "item3", value: string) => void;
+  onUpdateReflection: (field: "item1", value: string) => void;
 };
 
 export function TaskListPane({
@@ -208,7 +250,7 @@ export function TaskListPane({
   });
 
   return (
-    <section className="flex w-[280px] shrink-0 flex-col border-r border-border bg-background">
+    <section className="flex min-w-[420px] flex-1 flex-col border-r border-border bg-background">
       <header className="flex h-12 shrink-0 flex-col items-start justify-center border-b border-border px-3">
         <h2 className="text-sm font-semibold text-foreground">今日やること</h2>
         <p className="text-[11px] text-muted-foreground">{todayLabel}</p>
@@ -223,7 +265,7 @@ export function TaskListPane({
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveDragId(null)}
         >
-          <div className="flex flex-col gap-5 px-3 py-4">
+          <div className="flex flex-col gap-3 px-2.5 py-3">
             {slotGroups.map((group) => (
               <SlotGroup
                 key={`slot:${group.slot}`}
@@ -243,6 +285,7 @@ export function TaskListPane({
             ))}
             {doneGroup && doneGroup.items.length > 0 && (
               <CollapsibleGroup
+                key={`done:${doneGroup.items.length}`}
                 label={doneGroup.label}
                 items={doneGroup.items}
                 open={doneOpen}
@@ -257,6 +300,7 @@ export function TaskListPane({
             )}
             {archivedGroup && (
               <ArchivedGroup
+                key={`archived:${archivedGroup.items.length}`}
                 label={archivedGroup.label}
                 items={archivedGroup.items}
                 open={archivedOpen}
@@ -351,15 +395,21 @@ function SlotGroup({
     id: `dropzone:${slot}`,
     data: { containerId: slot },
   });
+  const theme = SLOT_HEADER_THEME[slot];
 
   return (
     <div>
-      <div className="sticky top-0 z-10 -mx-3 mb-2 flex items-center justify-between gap-2 bg-background px-5 py-1.5">
+      <div
+        className={cn(
+          "sticky top-0 z-10 -mx-0.5 mb-1 flex items-center justify-between gap-2 rounded-md border px-2.5 py-1 backdrop-blur-sm",
+          theme.header,
+        )}
+      >
         <div className="flex min-w-0 items-center gap-1.5">
-          <h3 className="truncate text-xs font-medium text-muted-foreground">
+          <h3 className={cn("truncate text-xs font-semibold", theme.title)}>
             {label}
           </h3>
-          <Badge variant="secondary" size="xs">
+          <Badge variant="secondary" size="xs" className={theme.badge}>
             {items.length}
           </Badge>
         </div>
@@ -369,7 +419,7 @@ function SlotGroup({
           size="icon-xs"
           onClick={onAddRequest}
           aria-label={`${label} にタスクを追加`}
-          className="text-muted-foreground hover:text-foreground"
+          className={theme.addButton}
         >
           <Plus aria-hidden="true" />
         </Button>
@@ -383,16 +433,16 @@ function SlotGroup({
           ref={setNodeRef}
           data-slot={slot}
           className={cn(
-            "flex flex-col gap-1",
+            "flex flex-col gap-0.5",
             items.length === 0 &&
-              "min-h-12 rounded-md border border-dashed border-border/70 p-2",
+              "min-h-10 rounded-md border border-dashed border-border/70 p-1.5",
             items.length === 0 && isOver && "border-primary/60 bg-primary/5",
           )}
         >
           {items.length === 0 ? (
             <li
               className={cn(
-                "pointer-events-none flex h-8 items-center justify-center text-xs",
+                "pointer-events-none flex h-7 items-center justify-center text-xs",
                 isOver ? "text-primary" : "text-muted-foreground",
               )}
               aria-hidden="true"
@@ -459,23 +509,24 @@ function CollapsibleGroup({
         render={
           <div
             className={cn(
-              "group/done-trigger sticky top-0 z-10 -mx-3 mb-2 flex cursor-pointer items-center justify-between gap-2 bg-background px-5 py-1.5",
-              "rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              "group/done-trigger sticky top-0 z-10 -mx-0.5 mb-1 flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1 backdrop-blur-sm",
+              "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              SLOT_HEADER_THEME.done.header,
             )}
           />
         }
       >
         <div className="flex min-w-0 items-center gap-1.5">
-          <h3 className="truncate text-xs font-medium text-muted-foreground">
+          <h3 className={cn("truncate text-xs font-semibold", SLOT_HEADER_THEME.done.title)}>
             {label}
           </h3>
-          <Badge variant="secondary" size="xs">
+          <Badge variant="secondary" size="xs" className={SLOT_HEADER_THEME.done.badge}>
             {items.length}
           </Badge>
         </div>
         <ChevronDown
           aria-hidden="true"
-          className="size-4 text-muted-foreground transition-[color,transform] group-hover/done-trigger:text-foreground in-data-[panel-open]:rotate-180"
+          className="size-4 text-income transition-[color,transform] group-hover/done-trigger:text-income in-data-[panel-open]:rotate-180"
         />
         <span className="sr-only">{`${label}を開く`}</span>
       </CollapsibleTrigger>
@@ -489,9 +540,9 @@ function CollapsibleGroup({
             ref={setNodeRef}
             data-slot={slot}
             className={cn(
-              "flex flex-col gap-1",
+              "flex flex-col gap-0.5",
               items.length === 0 &&
-                "min-h-12 rounded-md border border-dashed border-border/70 p-2",
+                "min-h-10 rounded-md border border-dashed border-border/70 p-1.5",
               items.length === 0 && isOver && "border-primary/60 bg-primary/5",
             )}
           >
@@ -546,17 +597,18 @@ function ArchivedGroup({
         render={
           <div
             className={cn(
-              "group/archived-trigger sticky top-0 z-10 -mx-3 mb-2 flex cursor-pointer items-center justify-between gap-2 bg-background px-5 py-1.5",
-              "rounded-md outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              "group/archived-trigger sticky top-0 z-10 -mx-0.5 mb-1 flex cursor-pointer items-center justify-between gap-2 rounded-md border px-2.5 py-1 backdrop-blur-sm",
+              "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
+              ARCHIVED_HEADER_THEME.header,
             )}
           />
         }
       >
         <div className="flex min-w-0 items-center gap-1.5">
-          <h3 className="truncate text-xs font-medium text-muted-foreground">
+          <h3 className={cn("truncate text-xs font-semibold", ARCHIVED_HEADER_THEME.title)}>
             {label}
           </h3>
-          <Badge variant="secondary" size="xs">
+          <Badge variant="secondary" size="xs" className={ARCHIVED_HEADER_THEME.badge}>
             {items.length}
           </Badge>
         </div>
@@ -567,7 +619,7 @@ function ArchivedGroup({
         <span className="sr-only">{`${label}を開く`}</span>
       </CollapsibleTrigger>
       <CollapsibleContent>
-        <ul className="flex flex-col gap-1" data-slot="archived">
+        <ul className="flex flex-col gap-0.5" data-slot="archived">
           {items.map((task) => (
             <ArchivedTaskItem
               key={task.id}
@@ -600,7 +652,7 @@ function ArchivedTaskItem({
         type="button"
         onClick={() => onSelect(task.id)}
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
+          "flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors",
           "outline-none focus-visible:ring-3 focus-visible:ring-ring/50",
           selected
             ? "bg-accent text-accent-foreground"
@@ -612,7 +664,7 @@ function ArchivedTaskItem({
         </div>
         <span
           className={cn(
-            "shrink-0 text-xs tabular-nums transition-opacity group-focus-within/task:opacity-0 group-hover/task:opacity-0",
+            "shrink-0 text-xs tabular-nums transition-opacity group-focus-within/task:opacity-0 group-hover/task:opacity-0 [@media(pointer:coarse)]:opacity-0",
             selected ? "text-accent-foreground/80" : "text-muted-foreground",
           )}
         >
@@ -629,6 +681,7 @@ function ArchivedTaskItem({
               className={cn(
                 "absolute top-1/2 right-1 -translate-y-1/2",
                 "opacity-0 group-focus-within/task:opacity-100 group-hover/task:opacity-100",
+                "[@media(pointer:coarse)]:opacity-100",
                 "transition-opacity",
                 "text-muted-foreground hover:text-foreground",
               )}

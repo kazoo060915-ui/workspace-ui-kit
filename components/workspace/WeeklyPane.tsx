@@ -10,7 +10,7 @@
  * Phase 2: ドラッグ&ドロップによる割り当て変更
  */
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { type Task } from "@/lib/schema";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,7 @@ const SLOT_ROWS = [
   { slot: "morning" as const, label: "朝枠" },
   { slot: "evening" as const, label: "夜枠" },
   { slot: "holiday" as const, label: "休日" },
+  { slot: "backlog" as const, label: "未割り当て" },
 ] as const;
 
 type WeeklyPaneProps = {
@@ -42,6 +43,7 @@ type WeeklyPaneProps = {
 
 export function WeeklyPane({ tasks, selectedTaskId, selectedCategoryId, onSelectTask }: WeeklyPaneProps) {
   const todayDow = useMemo(() => new Date().getDay(), []);
+  const [mobileDow, setMobileDow] = useState(todayDow);
 
   // slot × dow のマップを事前計算（カテゴリフィルタを含む）
   const grid = useMemo(() => {
@@ -67,71 +69,110 @@ export function WeeklyPane({ tasks, selectedTaskId, selectedCategoryId, onSelect
       <header className="flex h-12 shrink-0 items-center border-b border-border px-5">
         <h2 className="text-sm font-semibold">週間スケジュール</h2>
         <span className="ml-2 text-xs text-muted-foreground">
-          （読み取り専用 — 曜日の変更はタスク詳細パネルで行えます）
+          （読み取り専用 — 曜日割り当ての編集は現在停止中です）
         </span>
       </header>
 
       <ScrollArea className="min-h-0 flex-1">
-        <div className="min-w-[760px] p-4">
-          {/* 曜日ヘッダー行 */}
-          <div className="grid grid-cols-[80px_repeat(7,1fr)] gap-2 pb-1">
-            <div /> {/* スロットラベル列の空セル */}
-            {DOW_COLS.map((col) => {
-              const isToday = col.dow === todayDow;
+        <div className="p-3 md:p-4">
+          {/* モバイル: 1日表示 */}
+          <div className="flex flex-col gap-3 md:hidden">
+            <div className="flex gap-1 overflow-x-auto pb-1">
+              {DOW_COLS.map((col) => {
+                const selected = col.dow === mobileDow;
+                const isToday = col.dow === todayDow;
+                return (
+                  <button
+                    key={col.dow}
+                    type="button"
+                    onClick={() => setMobileDow(col.dow)}
+                    className={cn(
+                      "flex shrink-0 items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors",
+                      selected
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-muted text-muted-foreground hover:bg-accent hover:text-foreground",
+                    )}
+                  >
+                    {col.label}
+                    {isToday && <span className="size-1.5 rounded-full bg-current" />}
+                  </button>
+                );
+              })}
+            </div>
+
+            {SLOT_ROWS.map((row) => {
+              const key = `${row.slot}:${mobileDow}`;
+              const cellTasks = grid[key] ?? [];
               return (
-                <div
-                  key={col.dow}
-                  className={cn(
-                    "flex flex-col items-center gap-0.5 rounded-md py-1.5 text-center text-xs font-semibold",
-                    isToday
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  {col.label}
-                  {isToday && (
-                    <span className="size-1.5 rounded-full bg-primary" />
-                  )}
+                <div key={row.slot} className="flex flex-col gap-1.5">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground">{row.label}</span>
+                    <Badge variant="secondary" size="xs">
+                      {cellTasks.length}
+                    </Badge>
+                  </div>
+                  <div className="flex min-h-[72px] flex-col gap-1 rounded-lg border border-border bg-card p-2">
+                    {cellTasks.length === 0 ? (
+                      <div className="flex flex-1 items-center justify-center text-[10px] text-muted-foreground/60">
+                        —
+                      </div>
+                    ) : (
+                      cellTasks.map((task) => (
+                        <WeeklyTaskChip
+                          key={task.id}
+                          task={task}
+                          selected={task.id === selectedTaskId}
+                          onSelect={onSelectTask}
+                        />
+                      ))
+                    )}
+                  </div>
                 </div>
               );
             })}
           </div>
 
-          {/* スロット行 */}
-          <div className="flex flex-col gap-2">
-            {SLOT_ROWS.map((row) => (
-              <div
-                key={row.slot}
-                className="grid grid-cols-[80px_repeat(7,1fr)] gap-2"
-              >
-                {/* スロットラベル */}
-                <div className="flex items-start pt-2">
-                  <span className="text-xs font-medium text-muted-foreground">
-                    {row.label}
-                  </span>
-                </div>
+          {/* デスクトップ: 7列表示 */}
+          <div className="hidden min-w-[760px] flex-col gap-2 md:flex">
+            <div className="grid grid-cols-[80px_repeat(7,1fr)] gap-2 pb-1">
+              <div />
+              {DOW_COLS.map((col) => {
+                const isToday = col.dow === todayDow;
+                return (
+                  <div
+                    key={col.dow}
+                    className={cn(
+                      "flex flex-col items-center gap-0.5 rounded-md py-1.5 text-center text-xs font-semibold",
+                      isToday ? "bg-primary/10 text-primary" : "text-muted-foreground",
+                    )}
+                  >
+                    {col.label}
+                    {isToday && <span className="size-1.5 rounded-full bg-primary" />}
+                  </div>
+                );
+              })}
+            </div>
 
-                {/* 各曜日のセル */}
+            {SLOT_ROWS.map((row) => (
+              <div key={row.slot} className="grid grid-cols-[80px_repeat(7,1fr)] gap-2">
+                <div className="flex items-start pt-2">
+                  <span className="text-xs font-medium text-muted-foreground">{row.label}</span>
+                </div>
                 {DOW_COLS.map((col) => {
                   const key = `${row.slot}:${col.dow}`;
                   const cellTasks = grid[key] ?? [];
                   const isToday = col.dow === todayDow;
-
                   return (
                     <div
                       key={col.dow}
                       className={cn(
                         "flex min-h-[80px] flex-col gap-1 rounded-lg border p-2",
-                        isToday
-                          ? "border-primary/30 bg-primary/5"
-                          : "border-border bg-card",
+                        isToday ? "border-primary/30 bg-primary/5" : "border-border bg-card",
                       )}
                     >
                       {cellTasks.length === 0 ? (
                         <div className="flex flex-1 items-center justify-center">
-                          <span className="text-[10px] text-muted-foreground/50">
-                            —
-                          </span>
+                          <span className="text-[10px] text-muted-foreground/50">—</span>
                         </div>
                       ) : (
                         cellTasks.map((task) => (

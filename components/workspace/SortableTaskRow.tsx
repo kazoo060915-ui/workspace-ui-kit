@@ -17,6 +17,14 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 
+const SLOT_ROW_ACCENT: Record<SlotKey, string> = {
+  morning: "border-chart-3",
+  evening: "border-chart-1",
+  holiday: "border-chart-4",
+  backlog: "border-chart-2",
+  done: "border-income",
+};
+
 /**
  * Pane 2 のスロットグループ用、ドラッグ可能なタスク行。
  *
@@ -70,7 +78,8 @@ export function SortableTaskRow({
     >
       <div
         className={cn(
-          "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left transition-colors",
+          "flex w-full items-center gap-2 rounded-md border-l-4 px-2 py-1.5 text-left transition-colors",
+          SLOT_ROW_ACCENT[slot],
           selected
             ? "bg-accent text-accent-foreground"
             : "text-foreground hover:bg-muted",
@@ -93,6 +102,7 @@ export function SortableTaskRow({
           className={cn(
             "flex size-5 shrink-0 cursor-grab items-center justify-center rounded text-muted-foreground",
             "opacity-0 transition-opacity group-focus-within/task:opacity-100 group-hover/task:opacity-100",
+            "[@media(pointer:coarse)]:opacity-100",
             "hover:text-foreground active:cursor-grabbing",
             "outline-none focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50",
           )}
@@ -108,7 +118,7 @@ export function SortableTaskRow({
         >
           <p className="truncate text-sm">{task.title}</p>
         </button>
-        <span className="transition-opacity group-focus-within/task:opacity-0 group-hover/task:opacity-0 flex shrink-0 items-center gap-1.5">
+        <span className="transition-opacity group-focus-within/task:opacity-0 group-hover/task:opacity-0 [@media(pointer:coarse)]:opacity-0 flex shrink-0 items-center gap-1.5">
           {isRecurring && (
             <RefreshCw
               aria-label="定期タスク"
@@ -138,6 +148,7 @@ export function SortableTaskRow({
               className={cn(
                 "absolute top-1/2 right-1 -translate-y-1/2",
                 "opacity-0 group-focus-within/task:opacity-100 group-hover/task:opacity-100",
+                "[@media(pointer:coarse)]:opacity-100",
                 "transition-opacity",
                 "text-muted-foreground hover:text-foreground",
               )}

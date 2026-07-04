@@ -33,10 +33,10 @@ export async function dbAddTask(task: {
   if (error) console.error("dbAddTask:", error.message);
 }
 
-export async function dbArchiveTask(id: string): Promise<void> {
+export async function dbArchiveTask(id: string, archivedAt: string): Promise<void> {
   const { error } = await supabase
     .from("tasks")
-    .update({ archived: true })
+    .update({ archived: true, archived_at: archivedAt })
     .eq("id", id);
   if (error) console.error("dbArchiveTask:", error.message);
 }
@@ -44,7 +44,7 @@ export async function dbArchiveTask(id: string): Promise<void> {
 export async function dbRestoreTask(id: string): Promise<void> {
   const { error } = await supabase
     .from("tasks")
-    .update({ archived: false })
+    .update({ archived: false, archived_at: null })
     .eq("id", id);
   if (error) console.error("dbRestoreTask:", error.message);
 }
@@ -113,12 +113,21 @@ export async function dbUpdateTaskDaysOfWeek(
   if (error) console.error("dbUpdateTaskDaysOfWeek:", error.message);
 }
 
-export async function dbCompleteTask(taskId: string): Promise<void> {
+export async function dbCompleteTask(taskId: string, completedAt: string): Promise<void> {
   const { error } = await supabase
     .from("tasks")
-    .update({ slot: "done" })
+    .update({ slot: "done", completed_at: completedAt })
     .eq("id", taskId);
   if (error) console.error("dbCompleteTask:", error.message);
+}
+
+export async function dbDeleteTask(taskId: string): Promise<boolean> {
+  const { error } = await supabase.from("tasks").delete().eq("id", taskId);
+  if (error) {
+    console.error("dbDeleteTask:", error.message);
+    return false;
+  }
+  return true;
 }
 
 // ===== タスクログ =====
